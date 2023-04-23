@@ -58,7 +58,7 @@ func main() {
 	flag.Parse()
 
 	if *dirPath == "" || *baseURL == "" || *ext == "" {
-		fmt.Println("Usage: <program-name> -d <directory-path> -url <base-url> -ext <file-extension>")
+		fmt.Println("Usage: catlitter -d <directory-path> -url <base-url> -ext <file-extension>")
 		return
 	}
 
