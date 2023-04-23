@@ -76,7 +76,7 @@ func main() {
 
 	randomFile := files[rand.Intn(len(files))]
 	filePath := filepath.Join(*dirPath, randomFile.Name())
-	numWorkers := 24 // Set the number of concurrent Goroutines (2x number of cores)
+	numWorkers := 48 // Set the number of concurrent Goroutines (2x number of cores)
 
 	file, err := os.Open(filePath)
 	if err != nil {
