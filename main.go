@@ -34,7 +34,6 @@ func checkURL(baseURL, urlPath, ext string, noExt bool, wg *sync.WaitGroup, sem 
 		fullURL += ext
 	}
 
-	fmt.Printf(fullURL + "\n")
 	req, err := http.NewRequest("HEAD", fullURL, nil)
 	if err != nil {
 		fmt.Printf("Error creating request for %s: %v\n", fullURL, err)
