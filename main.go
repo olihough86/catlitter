@@ -23,15 +23,18 @@ var client = &http.Client{
 	},
 }
 
-func checkURL(baseURL, urlPath, ext string, wg *sync.WaitGroup, sem chan struct{}, validURLs chan<- string, totalRequests *int64) {
+func checkURL(baseURL, urlPath, ext string, noExt bool, wg *sync.WaitGroup, sem chan struct{}, validURLs chan<- string, totalRequests *int64) {
 	defer wg.Done()
 
 	sem <- struct{}{} // Acquire semaphore
 	defer func() { <-sem }()
+	
+	fullURL := baseURL + urlPath
+	if !noExt {
+		fullURL += ext
+	}
 
-	fullURL := baseURL + urlPath + ext
-	//fmt.Println("Trying:", fullURL) // Print the URL being tried
-
+	fmt.Printf(fullURL + "\n")
 	req, err := http.NewRequest("HEAD", fullURL, nil)
 	if err != nil {
 		fmt.Printf("Error creating request for %s: %v\n", fullURL, err)
@@ -57,10 +60,16 @@ func main() {
 	dirPath := flag.String("d", "", "Directory path to select a random file from")
 	baseURL := flag.String("url", "", "Base URL to prepend to each input URL")
 	ext := flag.String("ext", "", "File extension to append to each input URL")
+	noExt := flag.Bool("no-ext", false, "Do not append any file extension to input URL")
 	flag.Parse()
 
-	if *dirPath == "" || *baseURL == "" || *ext == "" {
-		fmt.Println("Usage: catlitter -d <directory-path> -url <base-url> -ext <file-extension>")
+	if *dirPath == "" || *baseURL == "" || (*ext == "" && !*noExt) {
+		fmt.Println("Usage: catlitter -d <directory-path> -url <base-url> -ext <file-extension> [-no-ext]")
+		return
+	}
+
+	if *ext != "" && *noExt {
+		fmt.Println("Error: The -ext and -no-ext flags are exclusive and cannot be used together.")
 		return
 	}
 
@@ -70,13 +79,21 @@ func main() {
 		fmt.Printf("Error reading directory: %v\n", err)
 		return
 	}
-
-	if len(files) == 0 {
-		fmt.Println("The specified directory is empty.")
+	
+	filteredFiles := make([]os.FileInfo, 0, len(files))
+	for _, file := range files {
+		if !file.IsDir() {
+			filteredFiles = append(filteredFiles, file)
+		}
+	}
+	
+	if len(filteredFiles) == 0 {
+		fmt.Println("The specified directory is empty or contains only subdirectories.")
 		return
 	}
-
-	randomFile := files[rand.Intn(len(files))]
+	
+	randomFile := filteredFiles[rand.Intn(len(filteredFiles))]
+	
 	filePath := filepath.Join(*dirPath, randomFile.Name())
 	numWorkers := 48 // Set the number of concurrent Goroutines (2x number of cores)
 
@@ -88,12 +105,13 @@ func main() {
 	defer file.Close()
 
 	outputPath := "valid.txt" // Set the output file name
-	outputFile, err := os.Create(outputPath)
+	outputFile, err := os.OpenFile(outputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("Error creating output file: %v\n", err)
+		fmt.Printf("Error opening output file: %v\n", err)
 		return
 	}
 	defer outputFile.Close()
+
 
 	scanner := bufio.NewScanner(file)
 	var wg sync.WaitGroup
@@ -122,7 +140,7 @@ func main() {
 	for scanner.Scan() {
 		urlPath := scanner.Text()
 		wg.Add(1)
-		go checkURL(*baseURL, urlPath, *ext, &wg, sem, validURLs, &totalRequests)
+		go checkURL(*baseURL, urlPath, *ext, *noExt, &wg, sem, validURLs, &totalRequests)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -132,7 +150,7 @@ func main() {
 
 	wg.Wait()
 	close(validURLs)
-	fmt.Println("All URLs checked.")
+	fmt.Println("\nAll URLs checked.")
 
 	doneDir := filepath.Join(*dirPath, "done")
 	err = os.MkdirAll(doneDir, 0755)
@@ -150,4 +168,3 @@ func main() {
 
 	fmt.Printf("Processed file moved to: %s\n", doneFilePath)
 }
-
