@@ -1,5 +1,3 @@
-// checkurl.go
-
 package main
 
 import (
