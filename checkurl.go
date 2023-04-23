@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -31,8 +32,10 @@ func checkURL(baseURL, urlPath, ext string, wg *sync.WaitGroup, sem chan struct{
     }
     defer resp.Body.Close()
 
-    // Check for 200 status code and not redirected to removed.png
-    if resp.StatusCode == 200 && resp.Request.URL.String() != "https://i.imgur.com/removed.png" {
+    finalURL := resp.Request.URL.String()
+
+    // Check for 200 status code and not redirected to removed.png or imgur.com
+    if resp.StatusCode == 200 && finalURL != "https://i.imgur.com/removed.png" && !strings.HasPrefix(finalURL, "https://imgur.com") {
         fmt.Println("Valid:", fullURL) // Print the valid URL
         validURLs <- fullURL
     }
