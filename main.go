@@ -1,3 +1,5 @@
+// main.go
+
 package main
 
 import (
@@ -14,52 +16,13 @@ import (
 	"time"
 )
 
-var client = &http.Client{
-	Timeout: 5 * time.Second,
-	Transport: &http.Transport{
-		MaxIdleConns:        48,
-		MaxIdleConnsPerHost: 48,
-		IdleConnTimeout:     30 * time.Second,
-	},
-}
-
-func checkURL(baseURL, urlPath, ext string, noExt bool, wg *sync.WaitGroup, sem chan struct{}, validURLs chan<- string, totalRequests *int64) {
-	defer wg.Done()
-
-	sem <- struct{}{} // Acquire semaphore
-	defer func() { <-sem }()
-	
-	fullURL := baseURL + urlPath
-	if !noExt {
-		fullURL += ext
-	}
-
-	req, err := http.NewRequest("HEAD", fullURL, nil)
-	if err != nil {
-		fmt.Printf("Error creating request for %s: %v\n", fullURL, err)
-		return
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Printf("Error while accessing %s: %v\n", fullURL, err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		fmt.Println("Valid:", fullURL) // Print the valid URL
-		validURLs <- fullURL
-	}
-
-	atomic.AddInt64(totalRequests, 1)
-}
-
 func main() {
 	dirPath := flag.String("d", "", "Directory path to select a random file from")
 	baseURL := flag.String("url", "", "Base URL to prepend to each input URL")
 	ext := flag.String("ext", "", "File extension to append to each input URL")
 	noExt := flag.Bool("no-ext", false, "Do not append any file extension to input URL")
+	treat301AsValid := flag.Bool("301-valid", false, "Treat 301 status code as valid")
+	geonodeConfig := flag.String("geonode-config", "", "Path to GeoNode proxy configuration file")
 	flag.Parse()
 
 	if *dirPath == "" || *baseURL == "" || (*ext == "" && !*noExt) {
@@ -72,27 +35,52 @@ func main() {
 		return
 	}
 
+	var client *http.Client
+
+	if *geonodeConfig != "" {
+		config, err := loadProxyConfig(*geonodeConfig)
+		if err != nil {
+			fmt.Printf("Failed to load proxy config: %v\n", err)
+			os.Exit(1)
+		}
+
+		client, err = createGeoNodeClient(config)
+		if err != nil {
+			fmt.Printf("Failed to create GeoNode client: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		client = &http.Client{
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        48,
+				MaxIdleConnsPerHost: 48,
+				IdleConnTimeout:     30 * time.Second,
+			},
+		}
+	}
+
 	rand.Seed(time.Now().UnixNano())
 	files, err := ioutil.ReadDir(*dirPath)
 	if err != nil {
 		fmt.Printf("Error reading directory: %v\n", err)
 		return
 	}
-	
+
 	filteredFiles := make([]os.FileInfo, 0, len(files))
 	for _, file := range files {
 		if !file.IsDir() {
 			filteredFiles = append(filteredFiles, file)
 		}
 	}
-	
+
 	if len(filteredFiles) == 0 {
 		fmt.Println("The specified directory is empty or contains only subdirectories.")
 		return
 	}
-	
+
 	randomFile := filteredFiles[rand.Intn(len(filteredFiles))]
-	
+
 	filePath := filepath.Join(*dirPath, randomFile.Name())
 	numWorkers := 48 // Set the number of concurrent Goroutines (2x number of cores)
 
@@ -110,7 +98,6 @@ func main() {
 		return
 	}
 	defer outputFile.Close()
-
 
 	scanner := bufio.NewScanner(file)
 	var wg sync.WaitGroup
@@ -139,7 +126,7 @@ func main() {
 	for scanner.Scan() {
 		urlPath := scanner.Text()
 		wg.Add(1)
-		go checkURL(*baseURL, urlPath, *ext, *noExt, &wg, sem, validURLs, &totalRequests)
+		go checkURL(*baseURL, urlPath, *ext, &wg, sem, validURLs, &totalRequests, *treat301AsValid, *noExt, client)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -167,3 +154,4 @@ func main() {
 
 	fmt.Printf("Processed file moved to: %s\n", doneFilePath)
 }
+
