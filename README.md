@@ -10,7 +10,7 @@ wait 37 years (approx) to cover all possible combinations of A-Za-z0-9 at 6 char
 
 profit.
 
-Geonode is now implemented, you will need to rename proxy_config.json.example to proxy_config.json and fill in your details from the geonode dash, 
+[Geonode](https://app.geonode.com/invite/24053) is now implemented, you will need to rename proxy_config.json.example to proxy_config.json and fill in your details from the geonode dash, 
 
 this will help with rate limits as you can rotate through millions of IPs automatically
 
