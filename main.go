@@ -22,7 +22,7 @@ func main() {
 	ext := flag.String("ext", "", "File extension to append to each input URL")
 	noExt := flag.Bool("no-ext", false, "Do not append any file extension to input URL")
 	treat301AsValid := flag.Bool("301-valid", false, "Treat 301 status code as valid")
-	geonodeConfig := flag.String("geonode-config", "", "Path to GeoNode proxy configuration file")
+	geoNode := flag.Bool("geonode", false, "Use GeoNode rotating proxy")
 	flag.Parse()
 
 	if *dirPath == "" || *baseURL == "" || (*ext == "" && !*noExt) {
@@ -37,28 +37,28 @@ func main() {
 
 	var client *http.Client
 
-	if *geonodeConfig != "" {
-		config, err := loadProxyConfig(*geonodeConfig)
-		if err != nil {
-			fmt.Printf("Failed to load proxy config: %v\n", err)
-			os.Exit(1)
-		}
+	if *geoNode {
+        config, err := loadProxyConfig("proxy_config.json") // Replace "proxy_config.json" with the path to your config file
+        if err != nil {
+            fmt.Printf("Failed to load proxy config: %v\n", err)
+            os.Exit(1)
+        }
 
 		client, err = createGeoNodeClient(config)
 		if err != nil {
 			fmt.Printf("Failed to create GeoNode client: %v\n", err)
 			os.Exit(1)
 		}
-	} else {
-		client = &http.Client{
-			Timeout: 5 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        48,
-				MaxIdleConnsPerHost: 48,
-				IdleConnTimeout:     30 * time.Second,
-			},
+		} else {
+			client = &http.Client{
+				Timeout: 5 * time.Second,
+				Transport: &http.Transport{
+					MaxIdleConns:        48,
+					MaxIdleConnsPerHost: 48,
+					IdleConnTimeout:     30 * time.Second,
+				},
+			}
 		}
-	}
 
 	rand.Seed(time.Now().UnixNano())
 	files, err := ioutil.ReadDir(*dirPath)
