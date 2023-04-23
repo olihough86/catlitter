@@ -1,6 +1,6 @@
 # catlitter
 
-a quick little validator for places that geberatr short urls, such as imgur, catbox, etc.
+a quick little validator for places that generate short urls, such as imgur, catbox, etc.
 
 Gnerate your (purrr)mutations (get it now) using crunch, I like to pipe that into split -l 100000 giving me many 100,000 line files in a directory
 
