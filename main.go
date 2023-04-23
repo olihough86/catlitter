@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -22,14 +23,14 @@ var client = &http.Client{
 	},
 }
 
-func checkURL(baseURL, urlPath, ext string, wg *sync.WaitGroup, sem chan struct{}, validURLs chan<- string) {
+func checkURL(baseURL, urlPath, ext string, wg *sync.WaitGroup, sem chan struct{}, validURLs chan<- string, totalRequests *int64) {
 	defer wg.Done()
 
 	sem <- struct{}{} // Acquire semaphore
 	defer func() { <-sem }()
 
 	fullURL := baseURL + urlPath + ext
-	fmt.Println("Trying:", fullURL) // Print the URL being tried
+	//fmt.Println("Trying:", fullURL) // Print the URL being tried
 
 	req, err := http.NewRequest("HEAD", fullURL, nil)
 	if err != nil {
@@ -48,8 +49,9 @@ func checkURL(baseURL, urlPath, ext string, wg *sync.WaitGroup, sem chan struct{
 		fmt.Println("Valid:", fullURL) // Print the valid URL
 		validURLs <- fullURL
 	}
-}
 
+	atomic.AddInt64(totalRequests, 1)
+}
 
 func main() {
 	dirPath := flag.String("d", "", "Directory path to select a random file from")
@@ -104,10 +106,23 @@ func main() {
 		}
 	}()
 
+	startTime := time.Now()
+	var totalRequests int64
+
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		for range ticker.C {
+			elapsed := time.Since(startTime)
+			requests := atomic.LoadInt64(&totalRequests)
+			reqPerSec := float64(requests) / elapsed.Seconds()
+			fmt.Printf("\rElapsed time: %v, Total requests: %d, Requests/sec: %.2f", elapsed, requests, reqPerSec)
+		}
+	}()
+
 	for scanner.Scan() {
 		urlPath := scanner.Text()
 		wg.Add(1)
-		go checkURL(*baseURL, urlPath, *ext, &wg, sem, validURLs)
+		go checkURL(*baseURL, urlPath, *ext, &wg, sem, validURLs, &totalRequests)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -135,3 +150,4 @@ func main() {
 
 	fmt.Printf("Processed file moved to: %s\n", doneFilePath)
 }
+
